@@ -1,8 +1,4 @@
 import random
-player_hp = 100
-player_mn = 100
-player_def = 5
-player_spd = 50
 class Inventory:
     def __init__(self):
         self.items = []

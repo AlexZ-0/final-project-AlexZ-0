@@ -205,7 +205,7 @@ def get_director(movie: str) -> str:
 
 def get_length(river: str) -> str:
     infobox_text = clean_text(get_first_infobox_text(get_page_html(river)))
-    pattern = r"#Regex"
+    pattern = r"Length\s*([\d,]+)\s*mi"
     error_text = "Page has no info on river length"
     match = get_match(infobox_text, pattern, error_text)
     return match.group(1)

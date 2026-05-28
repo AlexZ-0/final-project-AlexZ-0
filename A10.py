@@ -179,18 +179,17 @@ def get_capital(country: str) -> str:
     match = get_match(infobox_text, pattern, error_text)
     return match.group(1)
 
-
 def get_height(mountain: str) -> str:
     infobox_text = clean_text(get_first_infobox_text(get_page_html(mountain)))
-    pattern = r"#Regex"
+    pattern = r"([\d.,]+)\s*m\s*\(([\d.,]+)\s*ft\)"
     error_text = "Page has no info on mountain height"
     match = get_match(infobox_text, pattern, error_text)
     return match.group(1)
 
 
-def get_discovery_year(element: str) -> str:
-    infobox_text = clean_text(get_first_infobox_text(get_page_html(element)))
-    pattern = r"#Regex"
+def get_discovery_year(celestial_body: str) -> str:
+    infobox_text = clean_text(get_first_infobox_text(get_page_html(celestial_body)))
+    pattern = r"Discovered\s*([\d\-]+)"
     error_text = "Page has no info on discovery year"
     match = get_match(infobox_text, pattern, error_text)
     return match.group(1)
@@ -230,7 +229,6 @@ def population(matches: List[str]) -> List[str]:
 def polar_radius(matches: List[str]) -> List[str]:
     return [get_polar_radius(matches[0])]
 
-# NEW action wrappers
 def capital(matches: List[str]) -> List[str]:
     return [get_capital(" ".join(matches))]
 
@@ -273,9 +271,17 @@ def search_pa_list(src: List[str]) -> List[str]:
     for pat, act in pa_list:
         mat = match(pat, src)
         if mat is not None:
-            answer = act(mat)
-            return answer if answer else ["No answers"]
+            try:
+                answer = act(mat)
+                return answer if answer else ["No answers"]
+            except LookupError:
+                return ["Infobox could not be found"]
+            except AttributeError:
+                return ["Infobox has no related information"]
+            except Exception:
+                return ["An unexpected error occurred while reading the infobox"]
     return ["I don't understand"]
+
 
 
 def query_loop() -> None:

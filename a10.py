@@ -189,7 +189,7 @@ def get_height(mountain: str) -> str:
 
 def get_discovery_year(celestial_body: str) -> str:
     infobox_text = clean_text(get_first_infobox_text(get_page_html(celestial_body)))
-    pattern = r"Discovered\s*([\d\-]+)"
+    pattern = r"Composition by volume\s*((?:\s*(?:\d[\d.]*%|Trace).*\n?)+)"
     error_text = "Page has no info on discovery year"
     match = get_match(infobox_text, pattern, error_text)
     return match.group(1)

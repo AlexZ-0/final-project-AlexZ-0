@@ -174,7 +174,7 @@ def play_hangman(dummy: List[str]) -> List[str]:
 
 def get_capital(country: str) -> str:
     infobox_text = clean_text(get_first_infobox_text(get_page_html(country)))
-    pattern = r"#Regex"
+    pattern = r"Capital.*?([A-Z][a-z]+)(?=[A-Z])"
     error_text = "Page has no info on capital city"
     match = get_match(infobox_text, pattern, error_text)
     return match.group(1)
@@ -197,7 +197,7 @@ def get_discovery_year(celestial_body: str) -> str:
 
 def get_director(movie: str) -> str:
     infobox_text = clean_text(get_first_infobox_text(get_page_html(movie)))
-    pattern = r"#Regex"
+    pattern = r"Directed by[\s\n]+(.+)"
     error_text = "Page has no info on director"
     match = get_match(infobox_text, pattern, error_text)
     return match.group(1)

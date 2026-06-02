@@ -133,7 +133,11 @@ def get_wars(gun: str) -> str:
 
 
 def get_official_language(country: str) -> str:
-    value = get_infobox_row_value(country, r"^Official language(?: and national language)?$", "Page has no official language information")
+    value = get_infobox_row_value(
+        country,
+        r"^Official language(?:s)?(?: and national language(?:s)?)?$",
+        "Page has no official language information"
+    )
     return value
 
 
@@ -246,10 +250,10 @@ def get_height(mountain: str) -> str:
     return match.group(1)
 
 
-def get_discovery_year(celestial_body: str) -> str:
+def get_atmosphere_composition(celestial_body: str) -> str:
     infobox_text = clean_text(get_first_infobox_text(get_page_html(celestial_body)))
     pattern = r"Composition by volume\s*((?:\s*(?:\d[\d.]*%|Trace).*\n?)+)"
-    error_text = "Page has no info on discovery year"
+    error_text = "Page has no info on atmosphere composition"
     match = get_match(infobox_text, pattern, error_text)
     return match.group(1)
 
@@ -333,8 +337,8 @@ def known_for(matches: List[str]) -> List[str]:
 def height(matches: List[str]) -> List[str]:
     return [get_height(" ".join(matches))]
 
-def discovery_year(matches: List[str]) -> List[str]:
-    return [get_discovery_year(" ".join(matches))]
+def atmosphere_composition(matches: List[str]) -> List[str]:
+    return [get_atmosphere_composition(" ".join(matches))]
 
 def director(matches: List[str]) -> List[str]:
     return [get_director(" ".join(matches))]
@@ -365,7 +369,7 @@ pa_list: List[Tuple[List[str], Callable[[List[str]], List[Any]]]] = [
     ("where was % used".split(), wars),
     ("what is the capital of %".split(), capital),
     ("how tall is %".split(), height),
-    ("when was % discovered".split(), discovery_year),
+    ("what is the atmosphere composition of %".split(), atmosphere_composition),
     ("who directed %".split(), director),
     ("what is the citizenship of %".split(), citizenship),
     ("where did % study".split(), education),
@@ -396,7 +400,7 @@ query_templates: List[str] = [
     "conservation status ...",
     "infobox ...",
     "what is the polar radius of ...",
-    "when was ... discovered",
+    "what is the atmosphere composition of ...",
     "when did ... die",
     "what is the citizenship of ...",
     "where did ... study",

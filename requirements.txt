@@ -1,0 +1,8 @@
+Flask
+requests
+beautifulsoup4
+wikipedia
+#http://127.0.0.1:5000/
+#python app.py
+#lsof -i TCP:5000 -sTCP:LISTEN
+#kill <PID> (If command doesnt work force stop with kill -9 <PID>)

@@ -3,8 +3,7 @@ from wikipedia import WikipediaPage
 import wikipedia
 from bs4 import BeautifulSoup
 from match import match
-from typing import List, Callable, Tuple, Any, Match
-import random
+from typing import List, Callable, Tuple, Any, Match, Optional
 
 
 def get_page_html(title: str) -> str:
@@ -62,20 +61,39 @@ def get_match(
     return match
 
 
+def get_infobox_row_value(title: str, label_pattern: str, error_text: str) -> str:
+    html = get_page_html(title)
+    soup = BeautifulSoup(html, "html.parser")
+    infobox = soup.find(class_="infobox")
+    if not infobox:
+        raise LookupError("Page has no infobox")
+
+    for tr in infobox.find_all("tr"):
+        th = tr.find("th")
+        td = tr.find("td")
+        if not th or not td:
+            continue
+        label = clean_text(" ".join(th.stripped_strings))
+        if re.search(label_pattern, label, re.IGNORECASE):
+            return clean_text(" ".join(td.stripped_strings))
+
+    raise LookupError(error_text)
+
+
 def get_polar_radius(planet_name: str) -> str:
-    infobox_text = clean_text(get_first_infobox_text(get_page_html(planet_name)))
-    pattern = r"(?:Polar radius|Mean radius)(?:[^\d]*)(?P<radius>[\d,.]+)(?:.*?)km"
-    error_text = "Page infobox has no polar radius information"
-    match = get_match(infobox_text, pattern, error_text)
-    return match.group("radius")
+    value = get_infobox_row_value(planet_name, r"^(?:Polar radius|Mean radius)$", "Page infobox has no polar radius information")
+    pattern = r"([\d,.]+)\s*km"
+    error_text = "Polar radius row has no km value"
+    match = get_match(value, pattern, error_text)
+    return match.group(1)
 
 
 def get_birth_date(name: str) -> str:
-    infobox_text = clean_text(get_first_infobox_text(get_page_html(name)))
-    pattern = r"(?:Born\D*)(?P<birth>\d{4}-\d{2}-\d{2})"
-    error_text = "Page infobox has no birth information (at least none in xxxx-xx-xx format)"
-    match = get_match(infobox_text, pattern, error_text)
-    return match.group("birth")
+    value = get_infobox_row_value(name, r"^Born$", "Page infobox has no birth information (at least none in xxxx-xx-xx format)")
+    pattern = r"(\d{4}-\d{2}-\d{2})"
+    error_text = "Birth row has no ISO date"
+    match = get_match(value, pattern, error_text)
+    return match.group(1)
 
 
 def show_infobox(matches: List[str]) -> List[str]:
@@ -102,88 +120,129 @@ def get_symptoms(sickness: str) -> str:
 
 
 def get_population(state: str) -> str:
-    infobox_text = clean_text(get_first_infobox_text(get_page_html(state)))
-    pattern = r"Population.*?Total\s*([\d,]+)"
-    error_text = "Page has no info on population"
-    match = get_match(infobox_text, pattern, error_text)
+    value = get_infobox_row_value(state, r"^Population$", "Page has no info on population")
+    pattern = r"Total\s*([\d,]+)"
+    error_text = "Page has no info on population total"
+    match = get_match(value, pattern, error_text)
     return match.group(1)
 
 
 def get_wars(gun: str) -> str:
-    infobox_text = clean_text(get_first_infobox_text(get_page_html(gun)))
-    pattern = r"Wars\s*(.*?)\n"
-    error_text = "Page has no info on wars it was used in"
-    match = get_match(infobox_text, pattern, error_text)
+    value = get_infobox_row_value(gun, r"^Wars$", "Page has no info on wars it was used in")
+    return value
+
+
+def get_official_language(country: str) -> str:
+    value = get_infobox_row_value(country, r"^Official language(?: and national language)?$", "Page has no official language information")
+    return value
+
+
+def get_total_area(country: str) -> str:
+    html = get_page_html(country)
+    soup = BeautifulSoup(html, "html.parser")
+    infobox = soup.find(class_="infobox")
+    if not infobox:
+        raise LookupError("Page has no infobox")
+
+    for tr in infobox.find_all("tr"):
+        th = tr.find("th")
+        td = tr.find("td")
+        if not th or not td:
+            continue
+        label = clean_text(" ".join(th.stripped_strings))
+        if re.search(r"^\W*Total$", label, re.IGNORECASE):
+            value = clean_text(" ".join(td.stripped_strings))
+            if re.search(r"\d[\d,]*\s*km\s*2", value, re.IGNORECASE):
+                pattern = r"([\d,]+(?:\.\d+)?)\s*km\s*2"
+                error_text = "Page area row has no km2 value"
+                match = get_match(value, pattern, error_text)
+                return match.group(1)
+
+    raise LookupError("Page has no area information")
+
+
+def get_president(country: str) -> str:
+    value = get_infobox_row_value(country, r"^\W*President$", "Page has no president information")
+    return value.strip()
+
+
+def get_founded_date(company: str) -> str:
+    value = get_infobox_row_value(company, r"^Founded$", "Page has no founding date information")
+    pattern = r"(\d{4}-\d{2}-\d{2})"
+    error_text = "Founding row has no ISO date"
+    match = get_match(value, pattern, error_text)
     return match.group(1)
 
 
-def play_hangman(dummy: List[str]) -> List[str]:
-    places = [
-        "California", "Texas", "Florida", "New York",
-        "Chicago", "Houston", "Phoenix", "Philadelphia",
-        "San Antonio", "San Diego", "Dalla", "Moscow"
-    ]
+def get_founders(company: str) -> str:
+    value = get_infobox_row_value(company, r"^Founders$", "Page has no founder information")
+    return value
 
-    secret = random.choice(places).lower()
-    display = ["_" if c.isalpha() else c for c in secret]
-    guessed = set()
-    lives = 6
 
-    print("\n🎮 Starting Hangman! Guess the U.S. state or city.")
-    print("I’ll also give you a clue once you get close.\n")
+def get_revenue(company: str) -> str:
+    value = get_infobox_row_value(company, r"^Revenue$", "Page has no revenue information")
+    pattern = r"US\$\s*([\d.,]+(?:\s*billion|\s*million)?)"
+    error_text = "Revenue row has no dollars value"
+    match = get_match(value, pattern, error_text)
+    return match.group(1)
 
-    while lives > 0 and "_" in display:
-        print("Word:", " ".join(display))
-        print(f"Lives left: {lives}")
-        print(f"Guessed letters: {', '.join(sorted(guessed))}\n")
 
-        guess = input("Guess a letter: ").lower().strip()
+def get_net_income(company: str) -> str:
+    value = get_infobox_row_value(company, r"^Net income$", "Page has no net income information")
+    pattern = r"US\$\s*([\d.,]+(?:\s*billion|\s*million)?)"
+    error_text = "Net income row has no dollars value"
+    match = get_match(value, pattern, error_text)
+    return match.group(1)
 
-        if not guess.isalpha() or len(guess) != 1:
-            print("Please guess a single letter.\n")
-            continue
 
-        if guess in guessed:
-            print("You already guessed that.\n")
-            continue
+def get_number_of_employees(company: str) -> str:
+    value = get_infobox_row_value(company, r"^Number of employees$", "Page has no employee count information")
+    pattern = r"([\d,]+)"
+    error_text = "Employees row has no numeric value"
+    match = get_match(value, pattern, error_text)
+    return match.group(1)
 
-        guessed.add(guess)
 
-        if guess in secret:
-            print("Correct!\n")
-            for i, c in enumerate(secret):
-                if c == guess:
-                    display[i] = c
-        else:
-            print("Wrong!\n")
-            lives -= 1
+def get_headquarters(company: str) -> str:
+    value = get_infobox_row_value(company, r"^Headquarters$", "Page has no headquarters information")
+    return value
 
-        if display.count("_") <= len(secret) // 2:
-            try:
-                clue = get_population(secret.title())
-                print(f" Clue: Its population is around {clue}.\n")
-            except:
-                pass
 
-    if "_" not in display:
-        print(f"You win! The word was: {secret.title()}")
-    else:
-        print(f"Out of lives! The word was: {secret.title()}")
+def get_died_date(name: str) -> str:
+    value = get_infobox_row_value(name, r"^Died$", "Page has no death date information")
+    pattern = r"(\d{4}-\d{2}-\d{2})"
+    error_text = "Death row has no ISO date"
+    match = get_match(value, pattern, error_text)
+    return match.group(1)
 
-    return ["Game over"]
+
+def get_citizenship(name: str) -> str:
+    value = get_infobox_row_value(name, r"^Citizenship$", "Page has no citizenship information")
+    return value
+
+
+def get_education(name: str) -> str:
+    value = get_infobox_row_value(name, r"^Education$", "Page has no education information")
+    return value
+
+
+def get_known_for(name: str) -> str:
+    value = get_infobox_row_value(name, r"^Known for$", "Page has no known-for information")
+    return value
+
 
 def get_capital(country: str) -> str:
-    infobox_text = clean_text(get_first_infobox_text(get_page_html(country)))
-    pattern = r"Capital.*?([A-Z][a-z]+)(?=[A-Z])"
-    error_text = "Page has no info on capital city"
-    match = get_match(infobox_text, pattern, error_text)
+    value = get_infobox_row_value(country, r"^Capital", "Page has no info on capital city")
+    pattern = r"([A-Z][a-z]+(?: [A-Z][a-z]+)*)"
+    error_text = "Capital row has no city value"
+    match = get_match(value, pattern, error_text)
     return match.group(1)
 
 def get_height(mountain: str) -> str:
-    infobox_text = clean_text(get_first_infobox_text(get_page_html(mountain)))
+    value = get_infobox_row_value(mountain, r"^(?:Elevation|Height)$", "Page has no info on mountain height")
     pattern = r"([\d.,]+)\s*m\s*\(([\d.,]+)\s*ft\)"
-    error_text = "Page has no info on mountain height"
-    match = get_match(infobox_text, pattern, error_text)
+    error_text = "Height row has no metric value"
+    match = get_match(value, pattern, error_text)
     return match.group(1)
 
 
@@ -204,10 +263,10 @@ def get_director(movie: str) -> str:
 
 
 def get_length(river: str) -> str:
-    infobox_text = clean_text(get_first_infobox_text(get_page_html(river)))
-    pattern = r"Length\s*([\d,]+)\s*mi"
-    error_text = "Page has no info on river length"
-    match = get_match(infobox_text, pattern, error_text)
+    value = get_infobox_row_value(river, r"^Length$", "Page has no info on river length")
+    pattern = r"([\d,]+)\s*(?:km|mi)"
+    error_text = "Length row has no km or mi value"
+    match = get_match(value, pattern, error_text)
     return match.group(1)
 
 
@@ -232,6 +291,45 @@ def polar_radius(matches: List[str]) -> List[str]:
 def capital(matches: List[str]) -> List[str]:
     return [get_capital(" ".join(matches))]
 
+def official_language(matches: List[str]) -> List[str]:
+    return [get_official_language(" ".join(matches))]
+
+def total_area(matches: List[str]) -> List[str]:
+    return [get_total_area(" ".join(matches))]
+
+def president(matches: List[str]) -> List[str]:
+    return [get_president(" ".join(matches))]
+
+def founded_date(matches: List[str]) -> List[str]:
+    return [get_founded_date(" ".join(matches))]
+
+def founders(matches: List[str]) -> List[str]:
+    return [get_founders(" ".join(matches))]
+
+def revenue(matches: List[str]) -> List[str]:
+    return [get_revenue(" ".join(matches))]
+
+def net_income(matches: List[str]) -> List[str]:
+    return [get_net_income(" ".join(matches))]
+
+def number_of_employees(matches: List[str]) -> List[str]:
+    return [get_number_of_employees(" ".join(matches))]
+
+def headquarters(matches: List[str]) -> List[str]:
+    return [get_headquarters(" ".join(matches))]
+
+def died_date(matches: List[str]) -> List[str]:
+    return [get_died_date(" ".join(matches))]
+
+def citizenship(matches: List[str]) -> List[str]:
+    return [get_citizenship(" ".join(matches))]
+
+def education(matches: List[str]) -> List[str]:
+    return [get_education(" ".join(matches))]
+
+def known_for(matches: List[str]) -> List[str]:
+    return [get_known_for(" ".join(matches))]
+
 def height(matches: List[str]) -> List[str]:
     return [get_height(" ".join(matches))]
 
@@ -250,20 +348,59 @@ def bye_action(dummy: List[str]) -> None:
 
 pa_list: List[Tuple[List[str], Callable[[List[str]], List[Any]]]] = [
     ("when was % born".split(), birth_date),
+    ("what is the official language of %".split(), official_language),
+    ("what is the total area of %".split(), total_area),
+    ("who is the president of %".split(), president),
+    ("what is the population of %".split(), population),
+    ("when was % founded".split(), founded_date),
+    ("who founded %".split(), founders),
+    ("what is the revenue of %".split(), revenue),
+    ("what is the net income of %".split(), net_income),
+    ("how many employees does % have".split(), number_of_employees),
+    ("where are the headquarters of %".split(), headquarters),
     ("what is the polar radius of %".split(), polar_radius),
     ("infobox %".split(), show_infobox),
     ("conservation status %".split(), endangered),
     ("what are the symptoms of %".split(), symptoms),
-    ("what is the population of %".split(), population),
-    ("play hangman".split(), play_hangman),
     ("where was % used".split(), wars),
     ("what is the capital of %".split(), capital),
     ("how tall is %".split(), height),
     ("when was % discovered".split(), discovery_year),
     ("who directed %".split(), director),
+    ("what is the citizenship of %".split(), citizenship),
+    ("where did % study".split(), education),
+    ("what is % known for".split(), known_for),
     ("what is the length of %".split(), length),
 
     (["bye"], bye_action),
+]
+
+query_templates: List[str] = [
+    "what is the capital of ...",
+    "what is the official language of ...",
+    "what is the total area of ...",
+    "who is the president of ...",
+    "what is the population of ...",
+    "when was ... born",
+    "when was ... founded",
+    "who founded ...",
+    "who directed ...",
+    "what is the revenue of ...",
+    "what is the net income of ...",
+    "how many employees does ... have",
+    "where are the headquarters of ...",
+    "how tall is ...",
+    "what is the length of ...",
+    "what are the symptoms of ...",
+    "where was ... used",
+    "conservation status ...",
+    "infobox ...",
+    "what is the polar radius of ...",
+    "when was ... discovered",
+    "when did ... die",
+    "what is the citizenship of ...",
+    "where did ... study",
+    "what is ... known for",
 ]
 
 
@@ -283,6 +420,22 @@ def search_pa_list(src: List[str]) -> List[str]:
     return ["I don't understand"]
 
 
+def get_page_infobox(title: str) -> str:
+    html = get_page_html(title)
+    return clean_text(get_first_infobox_text(html))
+
+
+def query_response(src: List[str]) -> Tuple[List[str], Optional[str]]:
+    answers = search_pa_list(src)
+    title = None
+    for pat, act in pa_list:
+        mat = match(pat, src)
+        if mat is not None:
+            if pat != ["bye"]:
+                title = " ".join(mat).strip() if mat else None
+            break
+    return answers, title
+
 
 def query_loop() -> None:
     print("Welcome to the wikipedia chatbot!\n")
@@ -300,4 +453,5 @@ def query_loop() -> None:
     print("\nSo long!\n")
 
 
-query_loop()
+if __name__ == "__main__":
+    query_loop()

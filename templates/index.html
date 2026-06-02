@@ -1,0 +1,293 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+    <title>Wikipedia Chatbot</title>
+    <style>
+        body {
+            margin: 0;
+            min-height: 100vh;
+            font-family: Arial, sans-serif;
+            background: #ffffff;
+            color: #111;
+        }
+        .page {
+            max-width: 650px;
+            margin: 0 auto;
+            padding: 40px 20px;
+        }
+        h1 {
+            margin-top: 0;
+            font-size: 2rem;
+            text-align: center;
+        }
+        .card {
+            background: #f8f8f8;
+            border: 1px solid #e2e2e2;
+            border-radius: 12px;
+            padding: 24px;
+            box-shadow: 0 8px 24px rgba(0, 0, 0, 0.04);
+        }
+        label {
+            display: block;
+            font-weight: 600;
+            margin-bottom: 8px;
+        }
+        input[type='text'] {
+            width: 100%;
+            padding: 12px 14px;
+            border: 1px solid #ccc;
+            border-radius: 8px;
+            font-size: 1rem;
+            box-sizing: border-box;
+        }
+        button {
+            margin-top: 12px;
+            padding: 12px 18px;
+            border: none;
+            border-radius: 8px;
+            background: #333;
+            color: white;
+            font-size: 1rem;
+            cursor: pointer;
+        }
+        button:disabled {
+            background: #999;
+            cursor: not-allowed;
+        }
+        .response-box,
+        .infobox-box {
+            margin-top: 20px;
+            padding: 18px;
+            border: 1px solid #ddd;
+            border-radius: 10px;
+            background: white;
+            white-space: pre-wrap;
+            line-height: 1.5;
+        }
+        .controls {
+            display: flex;
+            gap: 12px;
+            flex-wrap: wrap;
+            align-items: center;
+        }
+        .info-row {
+            margin-top: 6px;
+            font-size: 0.95rem;
+            color: #555;
+        }
+        .suggestions {
+            position: relative;
+            margin-top: 10px;
+        }
+        .suggestions ul {
+            margin: 0;
+            padding: 0;
+            list-style: none;
+            border: 1px solid #ccc;
+            border-radius: 8px;
+            max-height: 220px;
+            overflow-y: auto;
+            background: white;
+            box-shadow: 0 10px 24px rgba(0, 0, 0, 0.08);
+        }
+        .suggestions li {
+            padding: 10px 14px;
+            cursor: pointer;
+            transition: background 0.2s ease;
+        }
+        .suggestions li:hover {
+            background: #f0f0f0;
+        }
+    </style>
+</head>
+<body>
+    <div class="page">
+        <h1>Wikipedia Chatbot</h1>
+        <div class="card">
+            <form id="chat-form">
+                <label for="query-input">Ask a question</label>
+                <input id="query-input" type="text" placeholder="e.g. what is the capital of France" autocomplete="off" required />
+                <div class="suggestions" id="suggestions-container" hidden>
+                    <ul id="suggestions-list"></ul>
+                </div>
+                <div class="controls">
+                    <button type="submit">Ask</button>
+                    <button id="show-infobox" type="button" hidden>Show Infobox</button>
+                </div>
+            </form>
+
+            <div class="response-box" id="response-box">Your answer will appear here.</div>
+            <div class="infobox-box" id="infobox-box" hidden></div>
+        </div>
+    </div>
+
+    <script>
+        const form = document.getElementById('chat-form');
+        const queryInput = document.getElementById('query-input');
+        const showButton = document.getElementById('show-infobox');
+        const responseBox = document.getElementById('response-box');
+        const infoboxBox = document.getElementById('infobox-box');
+        const suggestionsContainer = document.getElementById('suggestions-container');
+        const suggestionsList = document.getElementById('suggestions-list');
+        const suggestions = [
+            'what is the capital of ...',
+            'what is the official language of ...',
+            'what is the total area of ...',
+            'who is the president of ...',
+            'what is the population of ...',
+            'when was ... born',
+            'when was ... founded',
+            'who founded ...',
+            'who directed ...',
+            'what is the revenue of ...',
+            'what is the net income of ...',
+            'how many employees does ... have',
+            'where are the headquarters of ...',
+            'how tall is ...',
+            'what is the length of ...',
+            'what are the symptoms of ...',
+            'where was ... used',
+            'conservation status ...',
+            'infobox ...',
+            'what is the polar radius of ...',
+            'when was ... discovered',
+            'when did ... die',
+            'what is the citizenship of ...',
+            'where did ... study',
+            'what is ... known for',
+        ];
+        let currentTitle = '';
+
+        function normalize(text) {
+            return text
+                .toLowerCase()
+                .replace(/\s+/g, ' ')
+                .trim();
+        }
+
+        function matchesSuggestion(suggestion, value) {
+            const hint = normalize(suggestion);
+            const query = normalize(value);
+            if (hint.includes(query) || query.includes(hint)) {
+                return true;
+            }
+
+            if (!hint.includes('...')) {
+                return false;
+            }
+
+            const [prefix, suffix] = hint.split('...').map((part) => part.trim());
+            if (prefix && suffix) {
+                return (
+                    query.startsWith(prefix) ||
+                    query.endsWith(suffix) ||
+                    (query.includes(prefix) && query.includes(suffix) && query.indexOf(prefix) <= query.indexOf(suffix))
+                );
+            }
+
+            if (prefix) {
+                return query.startsWith(prefix);
+            }
+
+            if (suffix) {
+                return query.endsWith(suffix);
+            }
+
+            return false;
+        }
+
+        function updateSuggestions() {
+            const value = queryInput.value.trim();
+            if (!value) {
+                suggestionsContainer.hidden = true;
+                return;
+            }
+
+            const filtered = suggestions.filter((item) =>
+                matchesSuggestion(item, value)
+            ).slice(0, 3);
+
+            if (!filtered.length) {
+                suggestionsContainer.hidden = true;
+                return;
+            }
+
+            suggestionsList.innerHTML = filtered
+                .map((item) => `<li>${item}</li>`)
+                .join('');
+            suggestionsContainer.hidden = false;
+        }
+
+        queryInput.addEventListener('input', updateSuggestions);
+        queryInput.addEventListener('focus', updateSuggestions);
+        queryInput.addEventListener('blur', () => {
+            setTimeout(() => {
+                suggestionsContainer.hidden = true;
+            }, 150);
+        });
+
+        suggestionsList.addEventListener('click', (event) => {
+            if (event.target.tagName !== 'LI') return;
+            queryInput.value = event.target.textContent;
+            queryInput.focus();
+            suggestionsContainer.hidden = true;
+        });
+
+        form.addEventListener('submit', async (event) => {
+            event.preventDefault();
+            const query = queryInput.value.trim();
+            if (!query) return;
+
+            responseBox.textContent = 'Loading...';
+            infoboxBox.hidden = true;
+            showButton.hidden = true;
+            currentTitle = '';
+
+            const response = await fetch('/api/chat', {
+                method: 'POST',
+                headers: {
+                    'Content-Type': 'application/json',
+                },
+                body: JSON.stringify({ query }),
+            });
+
+            const data = await response.json();
+            if (data.error) {
+                responseBox.textContent = data.error;
+                return;
+            }
+
+            responseBox.textContent = data.answer || 'No answer found.';
+            currentTitle = data.infoboxTitle || '';
+            if (currentTitle) {
+                showButton.hidden = false;
+                showButton.textContent = 'Show Infobox for "' + currentTitle + '"';
+            }
+        });
+
+        showButton.addEventListener('click', async () => {
+            if (!currentTitle) return;
+            infoboxBox.hidden = false;
+            infoboxBox.textContent = 'Loading infobox...';
+
+            const response = await fetch('/api/infobox', {
+                method: 'POST',
+                headers: {
+                    'Content-Type': 'application/json',
+                },
+                body: JSON.stringify({ title: currentTitle }),
+            });
+
+            const data = await response.json();
+            if (data.error) {
+                infoboxBox.textContent = 'Error: ' + data.error;
+                return;
+            }
+
+            infoboxBox.textContent = data.infobox || 'No infobox available.';
+        });
+    </script>
+</body>
+</html>

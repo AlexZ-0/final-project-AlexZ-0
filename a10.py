@@ -32,6 +32,37 @@ def get_page_html(title: str) -> str:
     raise ConnectionError(f"Could not retrieve Wikipedia page for '{title}' after 5 attempts")
 
 
+def search_wikipedia_titles(query: str, max_results: int = 10) -> List[str]:
+    response = requests.get(
+        "https://en.wikipedia.org/w/api.php",
+        params={
+            "action": "query",
+            "list": "search",
+            "srsearch": query,
+            "srlimit": max_results,
+            "format": "json",
+        },
+        headers={"User-Agent": "intro-ai-class/1.0"}
+    )
+    response.raise_for_status()
+    data = response.json()
+    return [item["title"] for item in data.get("query", {}).get("search", [])]
+
+
+def find_film_title(title: str) -> Optional[str]:
+    if re.search(r"\(.*film.*\)$", title, re.IGNORECASE):
+        return title
+
+    candidates = search_wikipedia_titles(f"{title} film", max_results=10)
+    for candidate in candidates:
+        if re.search(r"\b(film|movie)\b", candidate, re.IGNORECASE):
+            return candidate
+
+    if candidates:
+        return candidates[0]
+    return None
+
+
 def get_first_infobox_text(html: str) -> str:
     soup = BeautifulSoup(html, "html.parser")
     results = soup.find_all(class_="infobox")
@@ -259,11 +290,13 @@ def get_atmosphere_composition(celestial_body: str) -> str:
 
 
 def get_director(movie: str) -> str:
-    infobox_text = clean_text(get_first_infobox_text(get_page_html(movie)))
-    pattern = r"Directed by[\s\n]+(.+)"
-    error_text = "Page has no info on director"
-    match = get_match(infobox_text, pattern, error_text)
-    return match.group(1)
+    try:
+        return get_infobox_row_value(movie, r"^Directed by$", "Page has no info on director")
+    except LookupError:
+        film_title = find_film_title(movie)
+        if film_title and film_title.lower() != movie.lower():
+            return get_infobox_row_value(film_title, r"^Directed by$", "Page has no info on director")
+        raise
 
 
 def get_length(river: str) -> str:
@@ -371,9 +404,8 @@ pa_list: List[Tuple[List[str], Callable[[List[str]], List[Any]]]] = [
     ("how tall is %".split(), height),
     ("what is the atmosphere composition of %".split(), atmosphere_composition),
     ("who directed %".split(), director),
-    ("what is the citizenship of %".split(), citizenship),
     ("where did % study".split(), education),
-    ("what is % known for".split(), known_for),
+    ("where did % study".split(), education),
     ("what is the length of %".split(), length),
 
     (["bye"], bye_action),
@@ -402,9 +434,7 @@ query_templates: List[str] = [
     "what is the polar radius of ...",
     "what is the atmosphere composition of ...",
     "when did ... die",
-    "what is the citizenship of ...",
     "where did ... study",
-    "what is ... known for",
 ]
 
 
